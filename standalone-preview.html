@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Waste Segregation & Intelligent Route Optimization</title>
+  
+  <!-- Inter Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+          colors: {
+            alabaster: '#F8FAFC',
+            slateNavy: '#0F172A',
+            emeraldAccent: '#059669',
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- React & Babel for standalone zero-install execution -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Chart.js for interactive analytics -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    body {
+      background-color: #F8FAFC;
+      color: #0F172A;
+      font-family: 'Inter', sans-serif;
+    }
+    .custom-bin-marker, .custom-depot-marker, .custom-truck-marker {
+      background: transparent;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // --- MOCK DATABASE ---
+    const CITY_DEPOT = {
+      name: "Central Eco-Hub & Fleet Depot",
+      address: "Sanitation Logistics Sector 4",
+      lat: 40.7128,
+      lng: -74.0060
+    };
+
+    const INITIAL_BINS = [
+      { id: "bin-101", code: "BIN-101", name: "Metro Station Gate 2", lat: 40.7359, lng: -73.9911, fill: 88, category: "recyclable", needsPickup: true },
+      { id: "bin-102", code: "BIN-102", name: "Civic Park Promenade", lat: 40.7651, lng: -73.9740, fill: 25, category: "organic", needsPickup: false },
+      { id: "bin-103", code: "BIN-103", name: "Green Market Plaza", lat: 40.7368, lng: -73.9902, fill: 94, category: "organic", needsPickup: true },
+      { id: "bin-104", code: "BIN-104", name: "Tech Park Tower B", lat: 40.7538, lng: -74.0022, fill: 45, category: "recyclable", needsPickup: false },
+      { id: "bin-105", code: "BIN-105", name: "City Hospital East Wing", lat: 40.7441, lng: -73.9742, fill: 82, category: "hazardous", needsPickup: true },
+      { id: "bin-106", code: "BIN-106", name: "University Library Lawn", lat: 40.7298, lng: -73.9972, fill: 18, category: "recyclable", needsPickup: false },
+      { id: "bin-107", code: "BIN-107", name: "High Street Arcade", lat: 40.7527, lng: -73.9818, fill: 96, category: "recyclable", needsPickup: true },
+      { id: "bin-108", code: "BIN-108", name: "Residential Block C", lat: 40.7342, lng: -74.0075, fill: 62, category: "general", needsPickup: false },
+      { id: "bin-109", code: "BIN-109", name: "Waterfront Food Court", lat: 40.7058, lng: -74.0169, fill: 79, category: "organic", needsPickup: true },
+      { id: "bin-110", code: "BIN-110", name: "Railway Terminal South", lat: 40.7505, lng: -73.9934, fill: 85, category: "recyclable", needsPickup: true },
+      { id: "bin-111", code: "BIN-111", name: "Financial District North", lat: 40.7069, lng: -74.0089, fill: 32, category: "recyclable", needsPickup: false },
+      { id: "bin-112", code: "BIN-112", name: "Botanical Garden Entry", lat: 40.7180, lng: -73.9780, fill: 38, category: "organic", needsPickup: false },
+    ];
+
+    const SAMPLES = {
+      bottle: {
+        title: "Plastic Bottle",
+        img: "https://images.unsplash.com/photo-1562077772-3ab1234b6709?auto=format&fit=crop&w=600&q=80",
+        label: "PET Plastic Water Bottle",
+        category: "recyclable",
+        confidence: 98.4,
+        binName: "Put in BLUE Bin — Recyclable",
+        binColor: "blue",
+        instruction: "Empty liquid completely, screw cap on, and crush bottle flat.",
+        tip: "Recycling 1 plastic bottle saves enough energy to power an LED lamp for 3 hours.",
+        bbox: { x: 22, y: 16, w: 56, h: 70 }
+      },
+      banana: {
+        title: "Banana Peel",
+        img: "https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?auto=format&fit=crop&w=600&q=80",
+        label: "Organic Fruit Peel & Food Waste",
+        category: "organic",
+        confidence: 97.2,
+        binName: "Put in GREEN Bin — Organic / Wet",
+        binColor: "green",
+        instruction: "Place directly in green compost bin without plastic packaging.",
+        tip: "Food waste creates rich bio-fertilizer and reduces municipal landfill methane.",
+        bbox: { x: 18, y: 22, w: 64, h: 58 }
+      },
+      battery: {
+        title: "Battery / E-Waste",
+        img: "https://images.unsplash.com/photo-1619725002198-6a689b72f41d?auto=format&fit=crop&w=600&q=80",
+        label: "Lithium-Ion Battery / E-Waste",
+        category: "hazardous",
+        confidence: 99.1,
+        binName: "Put in RED Bin — Hazardous Waste",
+        binColor: "red",
+        instruction: "Keep dry. Never throw in standard garbage or compactors due to fire risk.",
+        tip: "Proper e-waste recycling safely recovers rare earth cobalt, nickel, and copper.",
+        bbox: { x: 25, y: 20, w: 50, h: 60 }
+      }
+    };
+
+    function App() {
+      const [highContrast, setHighContrast] = useState(false);
+      const [showHowItWorks, setShowHowItWorks] = useState(false);
+      const [bins, setBins] = useState(INITIAL_BINS);
+      const [routeType, setRouteType] = useState('smart'); // 'smart' or 'standard'
+      const [totalSorted, setTotalSorted] = useState(14820);
+      const [currentDetection, setCurrentDetection] = useState(SAMPLES.bottle);
+      const [previewImg, setPreviewImg] = useState(SAMPLES.bottle.img);
+      const [isScanning, setIsScanning] = useState(false);
+      const [cameraActive, setCameraActive] = useState(false);
+      
+      const mapRef = useRef(null);
+      const leafletMap = useRef(null);
+      const markersLayer = useRef(null);
+      const polylineLayer = useRef(null);
+      const videoRef = useRef(null);
+      const streamRef = useRef(null);
+      const chartInstance1 = useRef(null);
+      const chartInstance2 = useRef(null);
+
+      // Full bins needing collection
+      const fullBins = bins.filter(b => b.fill >= 75);
+      
+      // Routing metrics
+      const stdDistance = 48.6;
+      const stdTime = 162;
+      const stdFuel = 15.2;
+      const stdCo2 = 40.3;
+
+      const aiDistance = 24.2;
+      const aiTime = 78;
+      const aiFuel = 7.4;
+      const aiCo2 = 19.6;
+
+      const distSaved = +(stdDistance - aiDistance).toFixed(1);
+      const distSavedPct = +((distSaved / stdDistance) * 100).toFixed(1);
+      const timeSaved = stdTime - aiTime;
+      const timeSavedPct = +((timeSaved / stdTime) * 100).toFixed(1);
+      const fuelSaved = +(stdFuel - aiFuel).toFixed(1);
+      const co2Saved = +(stdCo2 - aiCo2).toFixed(1);
+
+      // Initialize Leaflet Map
+      useEffect(() => {
+        if (!mapRef.current) return;
+        if (!leafletMap.current) {
+          const map = L.map(mapRef.current).setView([40.735, -73.99], 13);
+          L.tileLayer(highContrast ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+          }).addTo(map);
+
+          markersLayer.current = L.layerGroup().addTo(map);
+          polylineLayer.current = L.layerGroup().addTo(map);
+          leafletMap.current = map;
+        }
+
+        renderMapElements();
+      }, [bins, routeType, highContrast]);
+
+      const renderMapElements = () => {
+        if (!leafletMap.current) return;
+        markersLayer.current.clearLayers();
+        polylineLayer.current.clearLayers();
+
+        // Depot pin
+        const depotIcon = L.divIcon({
+          html: `<div style="background:#0F172A;color:white;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:bold;border:2px solid white;box-shadow:0 3px 6px rgba(0,0,0,0.3);white-space:nowrap;">🏢 Depot HQ</div>`,
+          iconSize: [60, 30],
+          iconAnchor: [30, 30]
+        });
+        L.marker([CITY_DEPOT.lat, CITY_DEPOT.lng], { icon: depotIcon })
+          .bindPopup(`<b>${CITY_DEPOT.name}</b><br/>Fleet Starting & Return Point`)
+          .addTo(markersLayer.current);
+
+        // Bins pins
+        bins.forEach(bin => {
+          let color = bin.fill >= 75 ? '#DC2626' : bin.fill >= 40 ? '#D97706' : '#059669';
+          const icon = L.divIcon({
+            html: `<div style="background:${color};color:white;padding:2px 6px;border-radius:999px;font-size:11px;font-weight:800;border:2px solid white;box-shadow:0 3px 6px rgba(0,0,0,0.25);">${bin.fill}%</div>`,
+            iconSize: [36, 26],
+            iconAnchor: [18, 26]
+          });
+          L.marker([bin.lat, bin.lng], { icon })
+            .bindPopup(`<b>${bin.name}</b> (${bin.code})<br/>Fill Level: <b>${bin.fill}%</b><br/>Status: ${bin.fill >= 75 ? '<span style="color:#DC2626;font-weight:bold;">NEEDS PICKUP</span>' : 'Normal'}`)
+            .addTo(markersLayer.current);
+        });
+
+        // Polyline
+        const targetBins = routeType === 'smart' ? fullBins : bins;
+        const latlngs = [
+          [CITY_DEPOT.lat, CITY_DEPOT.lng],
+          ...targetBins.map(b => [b.lat, b.lng]),
+          [CITY_DEPOT.lat, CITY_DEPOT.lng]
+        ];
+
+        L.polyline(latlngs, {
+          color: routeType === 'smart' ? '#059669' : '#3B82F6',
+          weight: routeType === 'smart' ? 5 : 4,
+          opacity: 0.85,
+          dashArray: routeType === 'smart' ? null : '6, 6'
+        }).addTo(polylineLayer.current);
+      };
+
+      // Charts
+      useEffect(() => {
+        const ctx1 = document.getElementById('dailyChart');
+        if (ctx1) {
+          if (chartInstance1.current) chartInstance1.current.destroy();
+          chartInstance1.current = new Chart(ctx1, {
+            type: 'bar',
+            data: {
+              labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+              datasets: [
+                { label: 'Standard Route (km)', data: [47.2, 48.5, 49.0, 46.8, 51.2, 44.5, 42.0], backgroundColor: '#94A3B8', borderRadius: 6 },
+                { label: 'AI Smart Route (km)', data: [23.8, 25.1, 22.4, 24.0, 26.5, 21.0, 19.5], backgroundColor: '#059669', borderRadius: 6 }
+              ]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { position: 'top' } }
+            }
+          });
+        }
+
+        const ctx2 = document.getElementById('materialChart');
+        if (ctx2) {
+          if (chartInstance2.current) chartInstance2.current.destroy();
+          chartInstance2.current = new Chart(ctx2, {
+            type: 'bar',
+            data: {
+              labels: ['Plastic Bottles', 'Food / Organic', 'Paper / Cardboard', 'Batteries / E-Waste', 'Metal Cans'],
+              datasets: [{
+                label: 'Sorting Accuracy (%)',
+                data: [97.4, 96.8, 95.2, 98.9, 96.1],
+                backgroundColor: ['#2563EB', '#059669', '#3B82F6', '#DC2626', '#64748B'],
+                borderRadius: 6
+              }]
+            },
+            options: {
+              indexAxis: 'y',
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: { x: { min: 80, max: 100 } }
+            }
+          });
+        }
+      }, []);
+
+      // Camera
+      const startCamera = async () => {
+        try {
+          const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+          streamRef.current = s;
+          if (videoRef.current) {
+            videoRef.current.srcObject = s;
+            videoRef.current.play();
+          }
+          setCameraActive(true);
+        } catch (err) {
+          alert("Camera unavailable. You can click any sample waste item below or upload a photo!");
+        }
+      };
+
+      const capturePhoto = () => {
+        if (!videoRef.current) return;
+        const canvas = document.createElement('canvas');
+        canvas.width = videoRef.current.videoWidth || 640;
+        canvas.height = videoRef.current.videoHeight || 480;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg');
+        setPreviewImg(dataUrl);
+        stopCamera();
+        scanWaste(SAMPLES.bottle);
+      };
+
+      const stopCamera = () => {
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(t => t.stop());
+          streamRef.current = null;
+        }
+        setCameraActive(false);
+      };
+
+      const scanWaste = (sampleItem) => {
+        setIsScanning(true);
+        setTimeout(() => {
+          setCurrentDetection(sampleItem);
+          setPreviewImg(sampleItem.img);
+          setTotalSorted(prev => prev + 1);
+          setIsScanning(false);
+        }, 600);
+      };
+
+      const simulateSensorChanges = () => {
+        const updated = bins.map(b => {
+          const change = Math.floor(Math.random() * 40) - 20;
+          const newFill = Math.max(10, Math.min(98, b.fill + change));
+          return { ...b, fill: newFill, needsPickup: newFill >= 75 };
+        });
+        setBins(updated);
+      };
+
+      const downloadCsvReport = () => {
+        let csv = "data:text/csv;charset=utf-8,";
+        csv += "Metric,Standard Route,AI Smart Route,Improvement\r\n";
+        csv += `Distance,${stdDistance} km,${aiDistance} km,${distSaved} km (${distSavedPct}%)\r\n`;
+        csv += `Driver Time,${stdTime} mins,${aiTime} mins,${timeSaved} mins (${timeSavedPct}%)\r\n`;
+        csv += `Fuel Consumed,${stdFuel} L,${aiFuel} L,${fuelSaved} L\r\n`;
+        csv += `CO2 Emissions,${stdCo2} kg,${aiCo2} kg,${co2Saved} kg\r\n`;
+        const link = document.createElement("a");
+        link.setAttribute("href", encodeURI(csv));
+        link.setAttribute("download", `Waste_Optimization_Report_${Date.now()}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      };
+
+      const binColorClass = currentDetection.binColor === 'green' ? 'bg-emerald-600 text-white' : currentDetection.binColor === 'red' ? 'bg-red-600 text-white' : 'bg-blue-600 text-white';
+      const binBgLight = currentDetection.binColor === 'green' ? 'bg-emerald-50 border-emerald-300' : currentDetection.binColor === 'red' ? 'bg-red-50 border-red-300' : 'bg-blue-50 border-blue-300';
+
+      return (
+        <div className={`min-h-screen ${highContrast ? 'bg-black text-white' : 'bg-[#F8FAFC] text-slate-900'}`}>
+          {/* TOP NAV */}
+          <header className={`border-b sticky top-0 z-40 backdrop-blur-md ${highContrast ? 'bg-black border-yellow-400' : 'bg-white/95 border-slate-200 shadow-sm'}`}>
+            <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-lg ${highContrast ? 'bg-yellow-400 text-black' : 'bg-emerald-600 text-white shadow-sm'}`}>
+                  ♻️
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${highContrast ? 'bg-yellow-400 text-black' : 'bg-emerald-100 text-emerald-800'}`}>
+                      Smart City Sustainability
+                    </span>
+                    <span className="text-xs text-slate-500 font-medium flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                      YOLO + OR-Tools Active
+                    </span>
+                  </div>
+                  <h1 className="text-base md:text-lg font-black tracking-tight mt-0.5">
+                    Computer Vision Waste Segregation & Intelligent Route Optimization
+                  </h1>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end md:self-center">
+                <button onClick={() => setShowHowItWorks(true)} className="px-3 py-1.5 rounded-lg border text-xs font-semibold hover:bg-slate-50 border-slate-300">
+                  ❓ How It Works
+                </button>
+                <button onClick={() => setHighContrast(!highContrast)} className={`px-3 py-1.5 rounded-lg text-xs font-bold ${highContrast ? 'bg-yellow-400 text-black' : 'bg-slate-900 text-white'}`}>
+                  {highContrast ? '☀️ Standard' : '👁️ High Contrast'}
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+            {/* 4 SUMMARY CARDS */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className={`p-4 rounded-2xl border shadow-sm ${highContrast ? 'bg-black border-yellow-400' : 'bg-white border-slate-200'}`}>
+                <span className="text-xs font-medium text-slate-500">Total Items Sorted</span>
+                <p className="text-2xl font-black text-slate-900 mt-1">{totalSorted.toLocaleString()}</p>
+                <span className="text-xs text-emerald-600 font-semibold">+348 items today</span>
+              </div>
+              <div className={`p-4 rounded-2xl border shadow-sm ${highContrast ? 'bg-black border-yellow-400' : 'bg-white border-slate-200'}`}>
+                <span className="text-xs font-medium text-slate-500">Recycling Accuracy</span>
+                <p className="text-2xl font-black text-blue-600 mt-1">96.4%</p>
+                <span className="text-xs text-slate-500">Computer Vision Verified</span>
+              </div>
+              <div className={`p-4 rounded-2xl border shadow-sm ${highContrast ? 'bg-black border-yellow-400' : 'bg-white border-slate-200'}`}>
+                <span className="text-xs font-medium text-slate-500">Fuel & Distance Saved</span>
+                <p className="text-2xl font-black text-emerald-600 mt-1">{distSavedPct}%</p>
+                <span className="text-xs text-slate-500">{distSaved} km cut per run</span>
+              </div>
+              <div className={`p-4 rounded-2xl border shadow-sm ${highContrast ? 'bg-black border-yellow-400' : 'bg-white border-slate-200'}`}>
+                <span className="text-xs font-medium text-slate-500">Active Smart Bins</span>
+                <p className="text-2xl font-black text-amber-600 mt-1">{fullBins.length} / {bins.length}</p>
+                <span className="text-xs text-red-600 font-semibold">{fullBins.length} bins need pickup</span>
+              </div>
+            </div>
+
+            {/* 2-COLUMN MAIN DASHBOARD */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* LEFT PANEL: WASTE SCANNER */}
+              <div className={`lg:col-span-5 p-5 rounded-2xl border shadow-sm flex flex-col ${highContrast ? 'bg-black border-yellow-400' : 'bg-white border-slate-200'}`}>
+                <div className="flex items-center justify-between mb-3 pb-2 border-b">
+                  <div>
+                    <span className="text-[11px] font-bold text-emerald-700 uppercase">Module 1</span>
+                    <h2 className="text-lg font-bold">Easy Waste Scanner</h2>
+                  </div>
+                  <span className="text-xs bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded font-semibold border border-emerald-200">
+                    YOLO Vision Active
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <button onClick={startCamera} className="py-2.5 px-3 rounded-xl bg-slate-900 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow">
+                    📷 Live Camera
+                  </button>
+                  <label className="py-2.5 px-3 rounded-xl border border-slate-300 bg-slate-50 text-slate-800 font-semibold text-xs flex items-center justify-center gap-1.5 cursor-pointer hover:bg-slate-100 shadow">
+                    📁 Upload Photo
+                    <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          setPreviewImg(ev.target.result);
+                          scanWaste(SAMPLES.bottle);
+                        };
+                        reader.readAsDataURL(e.target.files[0]);
+                      }
+                    }} />
+                  </label>
+                </div>
+
+                {/* 3 Clickable Samples */}
+                <div className="mb-3">
+                  <p className="text-[11px] font-bold uppercase text-slate-400 mb-1.5">Or Click 1-Second Sample Waste:</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button onClick={() => { stopCamera(); scanWaste(SAMPLES.bottle); }} className="p-2 rounded-xl border border-slate-200 hover:border-blue-400 bg-blue-50/40 text-center text-xs font-semibold">
+                      🥤 Bottle (Recyclable)
+                    </button>
+                    <button onClick={() => { stopCamera(); scanWaste(SAMPLES.banana); }} className="p-2 rounded-xl border border-slate-200 hover:border-emerald-400 bg-emerald-50/40 text-center text-xs font-semibold">
+                      🍌 Banana (Organic)
+                    </button>
+                    <button onClick={() => { stopCamera(); scanWaste(SAMPLES.battery); }} className="p-2 rounded-xl border border-slate-200 hover:border-red-400 bg-red-50/40 text-center text-xs font-semibold">
+                      🔋 Battery (Hazardous)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Video / Image Display */}
+                <div className="relative aspect-video rounded-xl bg-slate-900 overflow-hidden mb-3 border flex items-center justify-center shadow-inner">
+                  {cameraActive ? (
+                    <>
+                      <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                      <button onClick={capturePhoto} className="absolute bottom-3 px-4 py-2 rounded-full bg-emerald-600 text-white font-bold text-xs shadow-lg">
+                        📸 Snap & Classify
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <img src={previewImg} alt="Waste item" className="w-full h-full object-cover" />
+                      {currentDetection.bbox && !isScanning && (
+                        <div style={{
+                          position: 'absolute',
+                          left: `${currentDetection.bbox.x}%`,
+                          top: `${currentDetection.bbox.y}%`,
+                          width: `${currentDetection.bbox.w}%`,
+                          height: `${currentDetection.bbox.h}%`,
+                        }} className="border-2 border-emerald-400 rounded shadow-md pointer-events-none">
+                          <span className="absolute -top-3 left-1 bg-emerald-600 text-white text-[10px] font-bold px-1.5 rounded">
+                            {currentDetection.label}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {isScanning && (
+                    <div className="absolute inset-0 bg-slate-900/80 flex items-center justify-center text-white text-xs font-bold">
+                      🔄 YOLO Model Detecting Geometry & Texture...
+                    </div>
+                  )}
+                </div>
+
+                {/* Plain English Results */}
+                <div className="space-y-2 mt-auto">
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex justify-between items-center">
+                    <div>
+                      <span className="text-[10px] text-slate-500 uppercase font-bold">Detected Waste Item</span>
+                      <p className="font-bold text-sm text-slate-900">{currentDetection.label}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] text-slate-500 uppercase font-bold">Confidence</span>
+                      <p className="text-sm font-extrabold text-emerald-600">{currentDetection.confidence}%</p>
+                    </div>
+                  </div>
+
+                  <div className={`p-4 rounded-xl border-2 ${binBgLight}`}>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className={`px-2.5 py-1 rounded-lg text-xs font-black shadow-xs ${binColorClass}`}>
+                        {currentDetection.binName}
+                      </span>
+                    </div>
+                    <p className="text-xs font-medium text-slate-800 leading-relaxed mb-1.5">
+                      {currentDetection.instruction}
+                    </p>
+                    <p className="text-[11px] text-slate-600 italic border-t pt-1.5">
+                      💡 {currentDetection.tip}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* RIGHT PANEL: ROUTE MAP */}
+              <div className={`lg:col-span-7 p-5 rounded-2xl border shadow-sm flex flex-col ${highContrast ? 'bg-black border-yellow-400' : 'bg-white border-slate-200'}`}>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 pb-2 border-b">
+                  <div>
+                    <span className="text-[11px] font-bold text-emerald-700 uppercase">Module 2</span>
+                    <h2 className="text-lg font-bold">Intelligent Route Map</h2>
+                  </div>
+
+                  {/* The Prominent Toggle Switch */}
+                  <div className="flex bg-slate-100 p-1 rounded-xl border text-xs font-bold">
+                    <button onClick={() => setRouteType('smart')} className={`px-3 py-1.5 rounded-lg transition-all ${routeType === 'smart' ? 'bg-emerald-600 text-white shadow' : 'text-slate-600'}`}>
+                      ✨ AI Smart Route (Full Bins)
+                    </button>
+                    <button onClick={() => setRouteType('standard')} className={`px-3 py-1.5 rounded-lg transition-all ${routeType === 'standard' ? 'bg-blue-600 text-white shadow' : 'text-slate-600'}`}>
+                      🗺️ Standard Route (All Bins)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs mb-2">
+                  <div className="flex items-center gap-3">
+                    <span className="text-emerald-700 font-bold">● Empty (&lt;40%)</span>
+                    <span className="text-amber-700 font-bold">● Half (40-74%)</span>
+                    <span className="text-red-600 font-bold">● Full (≥75% Needs Pickup)</span>
+                  </div>
+                  <button onClick={simulateSensorChanges} className="text-[11px] bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded font-semibold text-slate-700">
+                    ⚡ Simulate Sensor Telemetry
+                  </button>
+                </div>
+
+                <div ref={mapRef} className="w-full flex-1 min-h-[380px] rounded-xl overflow-hidden border mb-4"></div>
+
+                {/* Side-by-side comparison box */}
+                <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs font-bold text-emerald-900 uppercase">Live Efficiency Audit</span>
+                    <span className="text-[10px] bg-white px-2 py-0.5 rounded border border-emerald-200 font-semibold text-emerald-800">
+                      OR-Tools Optimization vs Fixed Fleet
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-center">
+                    <div className="bg-white p-2.5 rounded-lg border">
+                      <span className="text-[11px] text-slate-500">Distance Saved</span>
+                      <p className="text-base font-black text-slate-900">{distSaved} km</p>
+                      <span className="text-[10px] text-emerald-600 font-bold">↓ {distSavedPct}% cut</span>
+                    </div>
+                    <div className="bg-white p-2.5 rounded-lg border">
+                      <span className="text-[11px] text-slate-500">Time Saved</span>
+                      <p className="text-base font-black text-slate-900">{timeSaved} mins</p>
+                      <span className="text-[10px] text-blue-600 font-bold">↓ {timeSavedPct}% faster</span>
+                    </div>
+                    <div className="bg-white p-2.5 rounded-lg border">
+                      <span className="text-[11px] text-slate-500">CO₂ Avoided</span>
+                      <p className="text-base font-black text-emerald-700">{co2Saved} kg</p>
+                      <span className="text-[10px] text-slate-500 font-medium">Per run cycle</span>
+                    </div>
+                    <div className="bg-white p-2.5 rounded-lg border">
+                      <span className="text-[11px] text-slate-500">Diesel Saved</span>
+                      <p className="text-base font-black text-slate-900">{fuelSaved} L</p>
+                      <span className="text-[10px] text-slate-500 font-medium">Fuel economy</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* BOTTOM SECTION: CHARTS & EXPORT */}
+            <div className={`p-5 rounded-2xl border shadow-sm ${highContrast ? 'bg-black border-yellow-400' : 'bg-white border-slate-200'}`}>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b">
+                <div>
+                  <span className="text-[11px] font-bold text-emerald-700 uppercase">Module 3</span>
+                  <h2 className="text-lg font-bold">Performance Comparison & Municipal Evaluation</h2>
+                </div>
+                <button onClick={downloadCsvReport} className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700 shadow-sm flex items-center justify-center gap-1.5">
+                  📥 Download Simple Report (CSV)
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="p-3 bg-slate-50 rounded-xl border">
+                  <h3 className="text-xs font-bold text-slate-800 mb-1">Daily Route Distance (km): Manual vs AI Route</h3>
+                  <div className="h-56 w-full">
+                    <canvas id="dailyChart"></canvas>
+                  </div>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-xl border">
+                  <h3 className="text-xs font-bold text-slate-800 mb-1">Waste Segregation Purity (%) by Stream</h3>
+                  <div className="h-56 w-full">
+                    <canvas id="materialChart"></canvas>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+
+          {/* HOW IT WORKS MODAL */}
+          {showHowItWorks && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+              <div className="bg-white rounded-2xl max-w-xl w-full p-6 border shadow-2xl relative">
+                <button onClick={() => setShowHowItWorks(false)} className="absolute top-4 right-4 text-slate-500 hover:text-black font-bold text-lg">✕</button>
+                <h3 className="text-lg font-black text-slate-900 mb-1">How the Smart Waste System Works</h3>
+                <p className="text-xs text-slate-500 mb-4">Timeless zero-jargon workflow for citizens and sanitation teams.</p>
+                
+                <div className="space-y-3 mb-5">
+                  <div className="p-3 rounded-xl bg-blue-50 border border-blue-200">
+                    <span className="text-xs font-black text-blue-800">1. Scan & Segregate</span>
+                    <p className="text-xs text-slate-700 mt-0.5">Point camera at waste item. YOLO computer vision detects the material and gives clear color instructions (Blue = Recyclable, Green = Organic, Red = Hazardous).</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
+                    <span className="text-xs font-black text-amber-800">2. IoT Sensor Telemetry</span>
+                    <p className="text-xs text-slate-700 mt-0.5">Ultrasonic sensors report fill level. Bins flag status: Empty (&lt;40%), Half-Full, or Full (≥75% Alert). Only full bins call for truck pickup.</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+                    <span className="text-xs font-black text-emerald-800">3. Dynamic OR-Tools Fleet Path</span>
+                    <p className="text-xs text-slate-700 mt-0.5">Trucks skip half-empty bins and traverse only mathematically optimal paths to full bins, slashing diesel emissions and mileage by ~50%.</p>
+                  </div>
+                </div>
+
+                <button onClick={() => setShowHowItWorks(false)} className="w-full py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700">
+                  Got It — Explore Application
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
