@@ -208,12 +208,13 @@ export const RouteMapLeaflet: React.FC<RouteMapLeafletProps> = ({
         style={{ height: '100%', minHeight: '420px' }}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          attribution='&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url={
             highContrast
               ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-              : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+              : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
           }
+          subdomains="abcd"
         />
 
         <RouteBoundsWatcher points={activeRoutePoints} />

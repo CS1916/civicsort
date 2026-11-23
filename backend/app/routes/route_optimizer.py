@@ -2,15 +2,17 @@ from fastapi import APIRouter, HTTPException
 from app.models.schemas import OptimizeRouteRequest, OptimizeRouteResponse
 from app.services.vrp_solver import optimize_waste_routes
 
-router = APIRouter(prefix="/optimize-route", tags=["Intelligent Route Optimization"])
+router = APIRouter(prefix="", tags=["Intelligent Route Optimization"])
 
-@router.post("", response_model=OptimizeRouteResponse)
+@router.post("/routes/optimize", response_model=OptimizeRouteResponse)
+@router.post("/optimize-route", response_model=OptimizeRouteResponse)
+@router.post("/api/optimize-route", response_model=OptimizeRouteResponse)
 async def optimize_route(request: OptimizeRouteRequest):
     """
-    Computes mathematically optimal collection routes using Google OR-Tools and OSRM street network.
-    Generates:
-    1. Standard Route: baseline naive route visiting 100% of municipal bins.
-    2. AI Smart Route: dynamically pruned and optimized path servicing ONLY bins with fillLevel >= threshold.
+    Computes optimal collection routes using Google OR-Tools and OSRM street network.
+    Compares:
+    1. Standard Route: naive sweep visiting all bins.
+    2. AI Smart Route: mathematically optimized path servicing only full bins (>=75%).
     Returns ordered GPS waypoints and precise metrics (distance saved, time saved, fuel saved, CO2 avoided).
     """
     if not request.bins:

@@ -1,0 +1,7 @@
+{
+  "provider": "esri",
+  "apiKey": "test-key-123",
+  "imageryStyle": "hybrid",
+  "defaultFallback": "Esri World Imagery + Labels (Free, zero-watermark, 100% active)",
+  "lastUpdated": "Just now"
+}

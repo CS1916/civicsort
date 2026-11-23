@@ -46,11 +46,11 @@ class SmartBin(BaseModel):
     needsPickup: bool = False
 
 class DepotLocation(BaseModel):
-    id: str = "depot-01"
-    name: str = "Central Eco-Hub & Fleet Depot"
-    address: str = "Sanitation Logistics Sector 4, Civic Core"
-    lat: float = 40.7128
-    lng: float = -74.0060
+    id: str = "depot-blr-01"
+    name: str = "Bengaluru Central Eco-Hub & Fleet Depot"
+    address: str = "MG Road Sanitation Logistics Core, Bengaluru, KA 560001"
+    lat: float = 12.9756
+    lng: float = 77.6097
 
 class RoutePoint(BaseModel):
     lat: float

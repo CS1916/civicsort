@@ -9,7 +9,7 @@ class Settings(BaseModel):
     # YOLO Computer Vision Config
     # If a trained custom weights file exists (e.g. weights/waste_yolov8.pt), use it,
     # otherwise fallback to yolov8n.pt or heuristic computer vision pipeline
-    YOLO_MODEL_PATH: str = os.getenv("YOLO_MODEL_PATH", "yolov8n.pt")
+    YOLO_MODEL_PATH: str = os.getenv("YOLO_MODEL_PATH", "weights/yolov8s.pt")
     CONFIDENCE_THRESHOLD: float = float(os.getenv("CONFIDENCE_THRESHOLD", "0.45"))
 
     # OSRM Street Routing Server (Defaults to OpenStreetMap public OSRM, with automatic Haversine fallback)
